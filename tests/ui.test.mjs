@@ -14,6 +14,7 @@ import { THEME_KEYS, applyTheme, resetTheme, validateTheme } from '../ui/src/the
 import { PRESETS, presetById } from '../ui/src/themes/presets.js';
 import { t, getLang, getLangPref, setLang, detectLang, applyStaticI18n, STRINGS } from '../ui/src/i18n.js';
 import { mount, unmount, tick } from 'svelte';
+import { buildTree, visibleRows } from '../ui/src/filetree.js';
 import ModelPop from '../ui/src/composer/ModelPop.svelte';
 import ForkPop from '../ui/src/composer/ForkPop.svelte';
 import CtxPop from '../ui/src/composer/CtxPop.svelte';
@@ -1787,5 +1788,61 @@ describe('renderToolImages', () => {
     });
     expect(body.querySelector('.img-missing').textContent).toBe('[imagem 176 KB]');
     expect(body.querySelector('img')).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Aba "Arquivos da pasta": árvore montada no cliente a partir dos paths que o
+ * Rust devolve (`project_files`). Só funções puras — nada de Tauri aqui.
+ * ------------------------------------------------------------------------- */
+describe('filetree — árvore e filas visíveis', () => {
+  const paths = ['README.md', 'src/main.rs', 'src/app/a.ts', 'src/app/b.ts', 'docs/x.md'];
+
+  it('buildTree aninha por diretório, dirs antes de arquivos e A–Z', () => {
+    const tree = buildTree(paths);
+    expect(tree.children.map((n) => n.name)).toEqual(['docs', 'src', 'README.md']);
+    const src = tree.children.find((n) => n.name === 'src');
+    expect(src.dir).toBe(true);
+    expect(src.path).toBe('src');
+    expect(src.children.map((n) => n.name)).toEqual(['app', 'main.rs']);
+    const app = src.children.find((n) => n.name === 'app');
+    expect(app.children.map((n) => n.path)).toEqual(['src/app/a.ts', 'src/app/b.ts']);
+  });
+
+  it('buildTree aceita Windows separador e ignora vazio', () => {
+    const tree = buildTree(['a\\b.ts', '', '/']);
+    expect(tree.children).toHaveLength(1);
+    expect(tree.children[0].path).toBe('a');
+    expect(tree.children[0].children[0].path).toBe('a/b.ts');
+  });
+
+  it('visibleRows sem filtro: pasta fechada esconde os filhos', () => {
+    const tree = buildTree(paths);
+    const rows = visibleRows(tree, [], '');
+    expect(rows.map((r) => r.name)).toEqual(['docs', 'src', 'README.md']);
+    expect(rows.find((r) => r.name === 'src').depth).toBe(0);
+  });
+
+  it('visibleRows respeita as pastas abertas (Set ou array)', () => {
+    const tree = buildTree(paths);
+    const rows = visibleRows(tree, new Set(['src']), '');
+    expect(rows.map((r) => r.name)).toEqual(['docs', 'src', 'app', 'main.rs', 'README.md']);
+    expect(rows.find((r) => r.name === 'app').depth).toBe(1);
+    // aberta a subpasta, os netos aparecem com depth 2
+    const deep = visibleRows(tree, ['src', 'src/app'], '');
+    expect(deep.find((r) => r.name === 'a.ts').depth).toBe(2);
+  });
+
+  it('visibleRows com filtro lista só arquivos e achata a árvore', () => {
+    const tree = buildTree(paths);
+    const rows = visibleRows(tree, [], 'APP/');
+    expect(rows.map((r) => r.path)).toEqual(['src/app/a.ts', 'src/app/b.ts']);
+    expect(rows.every((r) => !r.dir && r.depth === 0)).toBe(true);
+  });
+
+  it('visibleRows com filtro limita a 200 arquivos', () => {
+    const many = Array.from({ length: 250 }, (_, i) => `f${i}.ts`);
+    const rows = visibleRows(buildTree(many), [], 'f');
+    expect(rows).toHaveLength(200);
   });
 });

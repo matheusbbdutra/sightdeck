@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod files;
 mod git;
 mod plans;
 mod pty;
@@ -65,6 +66,8 @@ fn main() {
             sessions::app_info,
             sessions::open_external,
             sessions::open_file,
+            files::project_files,
+            files::read_text_file,
             sessions::revert_hunk,
             sessions::missions_status,
             sessions::copy_text,

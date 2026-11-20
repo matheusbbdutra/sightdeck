@@ -273,14 +273,17 @@
               title="Subagents desta sessão">Subagents</button>
       <button id="panelplans" class="panel-tab" data-pane="plans"
               title="planos de plans/ no projeto da sessão">Plano</button>
+      <button id="panelfiles" class="panel-tab" data-pane="files"
+              title="arquivos da pasta do projeto (somente leitura)">Arquivos da pasta</button>
     </div>
     <div id="subs" class="panel-pane"></div>
     <div id="plans" class="panel-pane hidden"></div>
+    <div id="files" class="panel-pane hidden"></div>
   </div>
   <div class="split-grip" id="splitgrip" title="arraste para redimensionar"></div>
   <div class="split-bottom">
     <div class="panel-tabs">
-      <span class="panel-tab active" title="Status do repositório git · commit, descartar, stash, push">Git<span id="gitcnt" class="cnt"></span></span>
+      <span class="panel-tab active" title="mudanças no repositório git · commit, descartar, stash, push">Alterado<span id="gitcnt" class="cnt"></span></span>
     </div>
     <div id="git" class="panel-pane"></div>
   </div>

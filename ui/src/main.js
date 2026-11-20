@@ -17,7 +17,7 @@ import { mountModelPop, mountCtxPop, mountForkPop, mountAttachments, mountPalett
 import { mountTabBar } from './tabs/mount.js';
 import { mountSessionTree } from './sidebar/mount.js';
 import { mountSearchResults } from './sidebar/search-mount.js';
-import { mountPlansPane, mountMissionsPane, mountGitPane, mountSubsPane } from './panels/mount.js';
+import { mountPlansPane, mountMissionsPane, mountGitPane, mountSubsPane, mountFilesPane } from './panels/mount.js';
 import { PRESETS } from './themes/presets.js';
 
 /* E2E: o plugin do WebdriverIO só entra no bundle de teste (`--mode e2e`).
@@ -1470,6 +1470,55 @@ async function openWorktreeDiff(path) {
   clear(body);
   if (!patch.trim()) { body.appendChild(el('div', 'empty', t('tools.no_changes'))); return; }
   renderPatch(body, patch, null, path);
+}
+
+/** Viewer read-only de um arquivo do projeto (aba "Arquivos da pasta").
+    O texto vem de `read_text_file`, que confina no `cwd` e corta em 256 KB;
+    "abrir no editor" é o `open_file` (app padrão do sistema). Não edita. */
+async function openFileViewer(path) {
+  const host = $('detaillog');
+  const [name, dir] = splitPath(path);
+  $('detailtitle').textContent = name + (dir ? '  ·  ' + dir : '');
+  clear(host);
+
+  const bar = el('div', 'fileview-bar');
+  const openBtn = el('button', 'ghost', t('files.open_editor'));
+  openBtn.onclick = async () => {
+    try { await inv('open_file', { cwd: current && current.cwd, path }); }
+    catch (e) { note('abrir: ' + e); }
+  };
+  const copyBtn = el('button', 'ghost', t('files.copy_path'));
+  copyBtn.onclick = () => copyText(copyBtn, path);
+  bar.append(openBtn, copyBtn);
+  host.appendChild(bar);
+
+  const body = el('div', 'fileview-body md');
+  body.textContent = t('files.loading');
+  host.appendChild(body);
+  $('detail').classList.remove('hidden');
+
+  const kb = (n) => {
+    const v = Number(n) || 0;
+    return v >= 1024 * 1024 ? (v / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(v / 1024)) + ' KB';
+  };
+  const seq = viewSeq;
+  let data;
+  try {
+    data = JSON.parse(String(await inv('read_text_file', { cwd: current && current.cwd, path })));
+  } catch (e) {
+    if (seq === viewSeq) body.textContent = 'ler ' + path + ': ' + e;
+    return;
+  }
+  if (seq !== viewSeq) return; // trocou de sessão durante a leitura
+
+  if (data.truncated) {
+    host.insertBefore(el('div', 'history-head', t('files.truncated', { total: kb(data.bytes) })), body);
+  }
+  if (data.binary) { body.textContent = t('files.binary'); return; }
+
+  const text = String(data.text || '');
+  body.textContent = '';
+  setMarkdown(body, text);
 }
 
 /** Abre o diff no mesmo painel de detalhe dos subagents. */
@@ -3506,6 +3555,12 @@ function resetPaged() {
 /** Arquivos editados são da sessão: a lista não sobrevive à troca. */
 function resetFiles() {
   editedFiles = [];
+  fileList = [];
+  filesError = '';
+  syncFiles();
+  // Aba visível na troca: relê com o `current` novo (os chamadores já o setaram ou zeraram).
+  const pane = $('files');
+  if (pane && !pane.classList.contains('hidden')) queueMicrotask(loadFiles);
 }
 
 function updateLoadMore(meta) {
@@ -5744,6 +5799,53 @@ try {
   debugNote('plans svelte: mount falhou — usando o render legado (' + e + ')');
 }
 
+/* Aba "Arquivos da pasta" (read-only): lista do Rust, árvore montada no cliente.
+   Só lê o que o git não ignora; sem watcher — relê ao clicar na aba e ao trocar de sessão. */
+let fileList = [];
+let filesError = '';
+let filesPane = null;
+
+/** Snapshot puro da aba Arquivos (Svelte + testes). */
+export function filesSnapshot(files, err) {
+  return {
+    files: Array.isArray(files) ? files : [],
+    error: err ? String(err) : '',
+    empty: t('panel.no_files'),
+    filterPh: t('files.filter_ph'),
+  };
+}
+
+async function loadFiles() {
+  const cwd = current && current.cwd;
+  const seq = viewSeq;
+  if (!cwd) { fileList = []; filesError = ''; syncFiles(); return; }
+  try {
+    const list = JSON.parse(String(await inv('project_files', { cwd })));
+    if (seq !== viewSeq) return; // trocou de sessão durante a leitura
+    fileList = Array.isArray(list) ? list : [];
+    filesError = '';
+  } catch (e) {
+    if (seq !== viewSeq) return;
+    fileList = [];
+    filesError = String(e);
+  }
+  syncFiles();
+}
+
+function syncFiles() {
+  if (filesPane) filesPane.sync();
+}
+
+const filesHost = {
+  snapshot: () => filesSnapshot(fileList, filesError),
+  open: (path) => openFileViewer(path),
+};
+try {
+  filesPane = mountFilesPane(filesHost);
+} catch (e) {
+  debugNote('files svelte: mount falhou (' + e + ')');
+}
+
 /* Painel Missões em Svelte (Fase 4b): snapshot read-only + detalhe no overlay. */
 const missionsHost = {
   snapshot: () => missionsSnapshot(missionsList, missionsError),
@@ -5893,8 +5995,10 @@ applySubsVisibility((() => { try { return localStorage.getItem('subs-hidden') ==
 function switchPanelPane(name) {
   $('panelsubs').classList.toggle('active', name === 'subs');
   $('panelplans').classList.toggle('active', name === 'plans');
+  $('panelfiles').classList.toggle('active', name === 'files');
   $('subs').classList.toggle('hidden', name !== 'subs');
   $('plans').classList.toggle('hidden', name !== 'plans');
+  $('files').classList.toggle('hidden', name !== 'files');
 }
 
 $('panelsubs').onclick = () => {
@@ -5903,6 +6007,8 @@ $('panelsubs').onclick = () => {
 };
 // Ativar a aba relê: o `plans/*.md` muda no disco entre turnos, sem polling próprio.
 $('panelplans').onclick = () => { switchPanelPane('plans'); loadPlans(); };
+// Ativar a aba relê: o agente cria arquivos entre turnos e não há watcher.
+$('panelfiles').onclick = () => { switchPanelPane('files'); loadFiles(); };
 $('diagclear').onclick = () => { diagBuf.length = 0; diagPending.clear(); renderDiag(); };
 initSplit();
 initColumnResize();

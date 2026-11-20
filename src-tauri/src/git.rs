@@ -170,7 +170,7 @@ fn no_repo() -> String {
 
 /// Roda git sem shell. `Ok(None)` = rodou e saiu != 0 (ex.: repo sem HEAD);
 /// `Err` = não conseguiu rodar ou estourou o timeout.
-fn run_git(cwd: &str, args: &[&str]) -> Result<Option<String>, String> {
+pub(crate) fn run_git(cwd: &str, args: &[&str]) -> Result<Option<String>, String> {
     let (ok, out) = run_git_raw(cwd, args)?;
     Ok(if ok { Some(out) } else { None })
 }

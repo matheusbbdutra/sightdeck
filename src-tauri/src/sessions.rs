@@ -94,7 +94,7 @@ fn sessions_root() -> Result<PathBuf, String> {
 
 /// Resolve `path` e exige que esteja sob `root`.
 /// `canonicalize` resolve `..` e symlinks antes de comparar, então `../` não escapa.
-fn contained_in(path: &Path, root: &Path) -> Result<PathBuf, String> {
+pub(crate) fn contained_in(path: &Path, root: &Path) -> Result<PathBuf, String> {
     let canon_root = root
         .canonicalize()
         .map_err(|e| format!("diretório base indisponível ({}): {e}", root.display()))?;

@@ -4,3 +4,6 @@ src-tauri/target/
 capture/target/
 *.log
 .DS_Store
+
+# estado local do agent-sync (nao versionar)
+.agent-sync/
