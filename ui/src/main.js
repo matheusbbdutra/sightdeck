@@ -552,6 +552,9 @@ async function loadSessions() {
 /* =============== busca global nas sessões =============== */
 let searchTimer = 0;
 let searchOffset = 0;
+// Cada disparo de busca leva um número: resposta de um filtro antigo não pode
+// repintar a lista depois que a pessoa continuou digitando/apagou.
+let searchSeq = 0;
 const SEARCH_PAGE = 20;
 
 function searchActive() {
@@ -598,12 +601,24 @@ function scheduleSearch() {
   $('searchfilters').classList.toggle('hidden', !on && !focused);
   $('searchresults').classList.toggle('hidden', !on);
   $('searchmeta').classList.toggle('hidden', !on);
-  if (!on) { loadSessions(); return; }
+  if (!on) {
+    // Sem critério: some com os resultados E descarta respostas em voo, senão a
+    // lista da busca antiga continua na tela (o painel é escondido por CSS).
+    searchSeq++;
+    clearTimeout(searchTimer);
+    searchItems = [];
+    searchTotal = 0;
+    searchOffset = 0;
+    if (searchResults) searchResults.sync();
+    loadSessions();
+    return;
+  }
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => runSearch(false), 300);
 }
 
 async function runSearch(append) {
+  const seq = ++searchSeq;
   const query = $('sesssearch').value || '';
   const tool = $('toolfilter').value || '';
   const errorsOnly = !!$('erronly').checked;
@@ -611,6 +626,7 @@ async function runSearch(append) {
   setSearchMeta('buscando…');
   try {
     const raw = await inv('search_sessions', { query, tool, errorsOnly, limit: SEARCH_PAGE, offset: searchOffset });
+    if (seq !== searchSeq) return;
     const res = JSON.parse(raw);
     const items = (res && res.results) || [];
     if (!append) searchItems = [];
@@ -622,7 +638,7 @@ async function runSearch(append) {
     setSearchMeta(t('search.total', { n: total }) + (res && res.truncated ? ' · ' + t('search.capped') : '') + (cov ? ' · ' + cov : '') + (searchOffset < total ? ' · ' + t('search.showing', { n: searchOffset }) : ''));
     if (searchResults) searchResults.sync();
   } catch (e) {
-    setSearchMeta(String(e));
+    if (seq === searchSeq) setSearchMeta(String(e));
   }
 }
 
@@ -2911,11 +2927,16 @@ export function modelListSnapshot(providers, currentId, filter, favs) {
   const hit = (m) => !q || (m.id + ' ' + (m.name || '')).toLowerCase().includes(q);
   const groups = [];
   const favRows = [];
+  // O mesmo id pode existir em mais de um provider (ex.: opencode e opencode-go):
+  // favorito é o id, então vale UMA linha — duas linhas repetiam a chave do
+  // `{#each}` do pop e o Svelte estourava `each_key_duplicate` no boot.
+  const favSeen = new Set();
   for (const provider of [...providers.keys()].sort()) {
     const all = providers.get(provider).filter(m => m && m.id);
     // Favoritos saem da lista principal e ganham seção própria (provider/modelo).
     for (const m of all) {
-      if (!favorite.has(m.id) || !hit(m)) continue;
+      if (!favorite.has(m.id) || !hit(m) || favSeen.has(m.id)) continue;
+      favSeen.add(m.id);
       favRows.push({
         id: m.id,
         label: provider + '/' + (m.name || m.id),

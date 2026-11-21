@@ -762,6 +762,20 @@ describe('snapshots dos pops (Fase 2)', () => {
     expect(filtrado.groups.length).toBe(0);
   });
 
+  it('modelListSnapshot: mesmo id favoritado em dois providers vira uma linha só', () => {
+    // Regressão do boot (2026-11-21): a chave do `{#each}` de favoritos é o id do
+    // modelo, mas o mesmo id existe em mais de um provider (opencode e
+    // opencode-go) — duas linhas iguais estouravam each_key_duplicate no boot.
+    const dois = new Map([
+      ['acme', [{ id: 'x', provider: 'acme', contextWindow: 1000 }]],
+      ['zed', [{ id: 'x', provider: 'zed', contextWindow: 1000 }]],
+    ]);
+    const snap = modelListSnapshot(dois, '', '', new Set(['x']));
+    expect(snap.favs.length).toBe(1);
+    expect(snap.favs[0].label).toBe('acme/x');
+    expect(snap.groups.length).toBe(0);
+  });
+
   it('levelsSnapshot: vazio, único (sem slider) e múltiplo', () => {
     expect(levelsSnapshot([], 'x')).toEqual({ levels: [], at: 0, name: '', showSlider: false });
     expect(levelsSnapshot(['off'], 'off')).toMatchObject({ at: 0, name: 'off', showSlider: false });

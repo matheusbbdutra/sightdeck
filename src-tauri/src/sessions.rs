@@ -168,33 +168,51 @@ pub fn usage_stats(days: Option<usize>) -> Result<String, String> {
     let mut tot_sessions = 0usize;
 
     let Ok(projects) = std::fs::read_dir(&root) else {
-        return Ok("{\"days\":[],\"projects\":[],\"totals\":{\"tokens\":0,\"cost\":0,\"sessions\":0}}".to_string());
+        return Ok(
+            "{\"days\":[],\"projects\":[],\"totals\":{\"tokens\":0,\"cost\":0,\"sessions\":0}}"
+                .to_string(),
+        );
     };
     for proj in projects.flatten() {
         let pdir = proj.path();
         if !pdir.is_dir() {
             continue;
         }
-        let pname = proj.file_name().to_string_lossy().trim_matches('-').to_string();
+        let pname = proj
+            .file_name()
+            .to_string_lossy()
+            .trim_matches('-')
+            .to_string();
         let mut proj_sessions = 0usize;
         let mut proj_tokens = 0u64;
         let mut proj_cost = 0f64;
-        let Ok(files) = std::fs::read_dir(&pdir) else { continue };
+        let Ok(files) = std::fs::read_dir(&pdir) else {
+            continue;
+        };
         for f in files.flatten() {
             let path = f.path();
             if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
                 continue;
             }
-            let Ok(fh) = std::fs::File::open(&path) else { continue };
+            let Ok(fh) = std::fs::File::open(&path) else {
+                continue;
+            };
             let mut touched = false;
             for line in BufReader::new(fh).lines().map_while(Result::ok) {
                 // Filtro barato: só mensagens que trazem `usage` (usually assistant).
                 if !line.contains("\"usage\"") || !line.contains("\"type\":\"message\"") {
                     continue;
                 }
-                let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else { continue };
-                let Some(usage) = v.get("message").and_then(|m| m.get("usage")) else { continue };
-                let tokens = usage.get("totalTokens").and_then(|x| x.as_u64()).unwrap_or(0);
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else {
+                    continue;
+                };
+                let Some(usage) = v.get("message").and_then(|m| m.get("usage")) else {
+                    continue;
+                };
+                let tokens = usage
+                    .get("totalTokens")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or(0);
                 let cost = usage
                     .get("cost")
                     .and_then(|c| c.get("total"))
@@ -292,7 +310,10 @@ pub fn auth_providers() -> Result<String, String> {
     // aparecem os adicionados por extensão/models.json, que não constam no
     // `Providers:` do CLI. Antes isso era só fallback (quando a lista vinha vazia).
     let mut configured: Vec<String> = Vec::new();
-    if let Ok(out) = std::process::Command::new(pi_bin()).arg("--list-models").output() {
+    if let Ok(out) = std::process::Command::new(pi_bin())
+        .arg("--list-models")
+        .output()
+    {
         let text = String::from_utf8_lossy(&out.stdout);
         for line in text.lines().skip(1) {
             if let Some(p) = line.split_whitespace().next() {
@@ -384,7 +405,11 @@ pub fn auth_logout(provider: String) -> Result<String, String> {
         .map_err(|e| format!("spawn pi auth logout: {e}"))?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        return Err(if err.is_empty() { "pi auth logout falhou".to_string() } else { err });
+        return Err(if err.is_empty() {
+            "pi auth logout falhou".to_string()
+        } else {
+            err
+        });
     }
     // O CLI devolve exit 0 mesmo sem remover nada: quando o provider não tem
     // credencial ele imprime `Unknown provider` e lista as armazenadas.
@@ -405,16 +430,49 @@ pub fn auth_logout(provider: String) -> Result<String, String> {
 /// Como o nome é interpolado em `sh -c`, só vale nome exato desta lista:
 /// nada fora dela chega ao shell.
 const LOGIN_PROVIDERS: &[&str] = &[
-    "amazon-bedrock", "ant-ling", "anthropic", "azure", "baseten", "cerebras",
-    "cloudflare-ai-gateway", "cloudflare-workers-ai", "deepseek", "fireworks",
-    "github-copilot", "google", "google-vertex", "groq", "huggingface",
-    "kimi-coding", "meta", "minimax", "minimax-cn", "mistral", "moonshotai",
-    "moonshotai-cn", "nvidia", "openai", "openai-codex", "opencode", "opencode-go",
-    "openrouter", "qwen-token-plan", "qwen-token-plan-cn",
-    "qwen-token-plan-individual", "qwen-token-plan-individual-cn", "radius",
-    "together", "typesafe", "vercel-ai-gateway", "xai", "xiaomi",
-    "xiaomi-token-plan-ams", "xiaomi-token-plan-cn", "xiaomi-token-plan-sgp",
-    "zai", "zai-coding-cn",
+    "amazon-bedrock",
+    "ant-ling",
+    "anthropic",
+    "azure",
+    "baseten",
+    "cerebras",
+    "cloudflare-ai-gateway",
+    "cloudflare-workers-ai",
+    "deepseek",
+    "fireworks",
+    "github-copilot",
+    "google",
+    "google-vertex",
+    "groq",
+    "huggingface",
+    "kimi-coding",
+    "meta",
+    "minimax",
+    "minimax-cn",
+    "mistral",
+    "moonshotai",
+    "moonshotai-cn",
+    "nvidia",
+    "openai",
+    "openai-codex",
+    "opencode",
+    "opencode-go",
+    "openrouter",
+    "qwen-token-plan",
+    "qwen-token-plan-cn",
+    "qwen-token-plan-individual",
+    "qwen-token-plan-individual-cn",
+    "radius",
+    "together",
+    "typesafe",
+    "vercel-ai-gateway",
+    "xai",
+    "xiaomi",
+    "xiaomi-token-plan-ams",
+    "xiaomi-token-plan-cn",
+    "xiaomi-token-plan-sgp",
+    "zai",
+    "zai-coding-cn",
 ];
 
 /// Valida `provider` contra a allowlist (rejeita vazio, fora-da-lista e
@@ -450,9 +508,7 @@ fn login_inner(bin_quoted: &str, provider: &str, windows: bool) -> String {
     if windows {
         format!("{bin_quoted} auth login {provider}; Write-Host ''; Read-Host 'enter para fechar'")
     } else {
-        format!(
-            "{bin_quoted} auth login {provider}; echo; printf 'enter para fechar '; read -r _"
-        )
+        format!("{bin_quoted} auth login {provider}; echo; printf 'enter para fechar '; read -r _")
     }
 }
 
@@ -465,26 +521,38 @@ pub fn open_terminal_login(provider: String) -> Result<String, String> {
 
     #[cfg(target_os = "linux")]
     let candidates: Vec<(&str, Vec<String>)> = vec![
-        ("xdg-terminal-exec", vec!["sh".into(), "-c".into(), inner.clone()]),
+        (
+            "xdg-terminal-exec",
+            vec!["sh".into(), "-c".into(), inner.clone()],
+        ),
         ("kitty", vec!["sh".into(), "-c".into(), inner.clone()]),
-        ("alacritty", vec!["-e".into(), "sh".into(), "-c".into(), inner.clone()]),
+        (
+            "alacritty",
+            vec!["-e".into(), "sh".into(), "-c".into(), inner.clone()],
+        ),
         ("foot", vec!["sh".into(), "-c".into(), inner.clone()]),
-        ("wezterm", vec!["start".into(), "--".into(), "sh".into(), "-c".into(), inner.clone()]),
-        ("xterm", vec!["-e".into(), "sh".into(), "-c".into(), inner.clone()]),
+        (
+            "wezterm",
+            vec![
+                "start".into(),
+                "--".into(),
+                "sh".into(),
+                "-c".into(),
+                inner.clone(),
+            ],
+        ),
+        (
+            "xterm",
+            vec!["-e".into(), "sh".into(), "-c".into(), inner.clone()],
+        ),
     ];
     #[cfg(target_os = "macos")]
-    let candidates: Vec<(&str, Vec<String>)> = vec![(
-        "open",
-        vec!["-a".into(), "Terminal".into(), inner.clone()],
-    )];
+    let candidates: Vec<(&str, Vec<String>)> =
+        vec![("open", vec!["-a".into(), "Terminal".into(), inner.clone()])];
     #[cfg(target_os = "windows")]
     let candidates: Vec<(&str, Vec<String>)> = vec![(
         "powershell.exe",
-        vec![
-            "-NoExit".into(),
-            "-Command".into(),
-            inner.clone(),
-        ],
+        vec!["-NoExit".into(), "-Command".into(), inner.clone()],
     )];
 
     for (prog, args) in candidates {
@@ -498,7 +566,9 @@ pub fn open_terminal_login(provider: String) -> Result<String, String> {
         }
     }
 
-    Err(format!("nenhum terminal respondeu; copie e rode: pi auth login {p}"))
+    Err(format!(
+        "nenhum terminal respondeu; copie e rode: pi auth login {p}"
+    ))
 }
 
 /// Copia texto para a área de transferência usando utilitário do sistema.
@@ -537,7 +607,6 @@ pub fn copy_text(text: String) -> Result<(), String> {
     }
     Err("nenhum utilitário de clipboard disponível".to_string())
 }
-
 
 /// Abre o seletor de pasta do sistema e devolve o caminho escolhido.
 /// Seletor de arquivo para anexar como contexto (o caminho vai no texto do prompt).
@@ -885,8 +954,9 @@ fn revert_hunk_in(cwd: &Path, file: &Path, hunk: &str) -> Result<String, String>
         ));
     }
     if hunk.contains("\u{2026} patch truncado") {
-        return Err("patch truncado: recarregue a aba Arquivos para ver o diff completo"
-            .to_string());
+        return Err(
+            "patch truncado: recarregue a aba Arquivos para ver o diff completo".to_string(),
+        );
     }
     let mut removed: Vec<&str> = Vec::new();
     let mut added: Vec<&str> = Vec::new();
@@ -923,8 +993,8 @@ fn revert_hunk_in(cwd: &Path, file: &Path, hunk: &str) -> Result<String, String>
         return Err(format!("não é arquivo: {}", target.display()));
     }
     // Só para comparar: o conteúdo nunca volta ao webview (só status/contagem).
-    let current = fs::read_to_string(&target)
-        .map_err(|e| format!("ler {}: {e}", target.display()))?;
+    let current =
+        fs::read_to_string(&target).map_err(|e| format!("ler {}: {e}", target.display()))?;
     let trailing_nl = current.ends_with('\n');
     let lines: Vec<&str> = current.lines().collect();
     let mut hits: Vec<usize> = Vec::new();
@@ -965,7 +1035,6 @@ fn revert_hunk_in(cwd: &Path, file: &Path, hunk: &str) -> Result<String, String>
     fs::write(&target, out).map_err(|e| format!("escrever {}: {e}", target.display()))?;
     Ok(format!("hunk desfeito em {}", target.display()))
 }
-
 
 pub(crate) fn escape_json(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 8);
@@ -1021,7 +1090,11 @@ pub fn pi_install(spec: String, local: bool) -> Result<String, String> {
         text.push('\n');
         text.push_str(&err);
     }
-    Ok(format!("exit {}\n{}", out.status.code().unwrap_or(-1), text.trim()))
+    Ok(format!(
+        "exit {}\n{}",
+        out.status.code().unwrap_or(-1),
+        text.trim()
+    ))
 }
 
 /// Adiciona/atualiza servidor MCP via `pi mcp add` (o CLI grava o mcp.json).
@@ -1066,7 +1139,11 @@ pub fn pi_mcp_add(
         text.push('\n');
         text.push_str(&err);
     }
-    Ok(format!("exit {}\n{}", out.status.code().unwrap_or(-1), text.trim()))
+    Ok(format!(
+        "exit {}\n{}",
+        out.status.code().unwrap_or(-1),
+        text.trim()
+    ))
 }
 
 /// Remove um pacote instalado (`pi remove <source>`).
@@ -1084,7 +1161,11 @@ pub fn pi_remove(spec: String, local: bool) -> Result<String, String> {
         text.push('\n');
         text.push_str(&err);
     }
-    Ok(format!("exit {}\n{}", out.status.code().unwrap_or(-1), text.trim()))
+    Ok(format!(
+        "exit {}\n{}",
+        out.status.code().unwrap_or(-1),
+        text.trim()
+    ))
 }
 
 /// Remove servidor MCP (`pi mcp remove <name>`).
@@ -1102,7 +1183,11 @@ pub fn pi_mcp_remove(name: String, local: bool) -> Result<String, String> {
         text.push('\n');
         text.push_str(&err);
     }
-    Ok(format!("exit {}\n{}", out.status.code().unwrap_or(-1), text.trim()))
+    Ok(format!(
+        "exit {}\n{}",
+        out.status.code().unwrap_or(-1),
+        text.trim()
+    ))
 }
 
 /// Servidores MCP em JSON (`pi mcp list --json`) — evita ler mcp.json e expor `env`.
@@ -1175,7 +1260,9 @@ pub fn kill_orphans() -> Result<usize, String> {
             continue;
         }
 
-        let _ = std::process::Command::new("kill").arg(pid.to_string()).status();
+        let _ = std::process::Command::new("kill")
+            .arg(pid.to_string())
+            .status();
         killed += 1;
     }
 
@@ -1324,7 +1411,11 @@ fn read_tail(path: &str, max_bytes: u64) -> Option<String> {
     file.read_to_end(&mut buf).ok()?;
     let text = String::from_utf8_lossy(&buf).to_string();
     if len > max_bytes {
-        return Some(text.split_once('\n').map(|(_, rest)| rest.to_string()).unwrap_or_default());
+        return Some(
+            text.split_once('\n')
+                .map(|(_, rest)| rest.to_string())
+                .unwrap_or_default(),
+        );
     }
     Some(text)
 }
@@ -1651,7 +1742,10 @@ fn read_session_messages_in(
 
     // Passo 1: contar TODAS as mensagens. Sem isto, o `total` parava no `break`
     // da coleta e `hasMore` saía sempre falso (bug do botão "carregar anteriores").
-    let total = raw.lines().filter(|l| l.contains("\"type\":\"message\"")).count();
+    let total = raw
+        .lines()
+        .filter(|l| l.contains("\"type\":\"message\""))
+        .count();
 
     let mut kept: Vec<Cow<'_, str>> = Vec::new();
     let mut skipped = 0usize;
@@ -1752,7 +1846,10 @@ fn slim_content(content: &mut serde_json::Value, text_chars: usize, args_bytes: 
                     // Base64 fica de fora do histórico (693 imagens, mediana de 176 KB):
                     // o card lê o arquivo pelo caminho da tool call e mostra o que o
                     // modelo viu. Mime e tamanho vão no bloco para o aviso do card.
-                    let bytes = block.get("data").and_then(|v| v.as_str()).map_or(0, |d| d.len() / 4 * 3);
+                    let bytes = block
+                        .get("data")
+                        .and_then(|v| v.as_str())
+                        .map_or(0, |d| d.len() / 4 * 3);
                     let mime = block
                         .get("mimeType")
                         .and_then(|v| v.as_str())
@@ -1768,7 +1865,11 @@ fn slim_content(content: &mut serde_json::Value, text_chars: usize, args_bytes: 
                 // `thinking` e `text` são os campos grandes de uma mensagem; sem
                 // tratar os dois, uma linha só de thinking continuava acima do teto.
                 for field in ["text", "thinking"] {
-                    let text = match block.get(field).and_then(|v| v.as_str()).map(str::to_string) {
+                    let text = match block
+                        .get(field)
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string)
+                    {
                         Some(text) => text,
                         None => continue,
                     };
@@ -1866,10 +1967,7 @@ fn list_children_in(dir: &Path, root: &Path) -> Result<String, String> {
         if !child_dir.is_dir() {
             continue;
         }
-        let child_id = child
-            .file_name()
-            .to_string_lossy()
-            .to_string();
+        let child_id = child.file_name().to_string_lossy().to_string();
 
         let Ok(runs) = fs::read_dir(&child_dir) else {
             continue;
@@ -1938,12 +2036,14 @@ const MAX_EDIT_ENTRIES: usize = 500;
 
 /// Busca global: guardas por arquivo/total (bytes de mensagem) + orçamento de tempo.
 /// O teto das edições (4 MiB) não serve aqui: cinco sessões grandes já estouravam
-/// e a varredura abortava sem ler as outras centenas de arquivos. Medido em 107
-/// sessões (215 MB): varredura completa em ~2 s; o teto por arquivo só corta
-/// sessão patológica, não a sessão grande do dia a dia.
+/// e a varredura abortava sem ler as outras centenas de arquivos. Medido em 145
+/// sessões (624 MB de .jsonl, 2,5 s com cache quente): o teto por arquivo só corta
+/// sessão patológica, não a sessão grande do dia a dia. O orçamento de tempo é o
+/// único limite global — sem teto total, a busca lia 96 MB e devolvia 56 resultados
+/// onde o corpus inteiro tem 75.
 const SEARCH_FILE_BYTES: usize = 32 * 1024 * 1024;
-const SEARCH_TOTAL_BYTES: usize = 96 * 1024 * 1024;
-const SEARCH_BUDGET_MS: u128 = 2500;
+const SEARCH_BUDGET_MS: u128 = 5000;
+const SNIPPET_CHARS: usize = 240;
 
 /// Mesma lógica com o root explícito — testável sem tocar em `HOME`.
 fn session_edits_in(path: &Path, root: &Path) -> Result<String, String> {
@@ -2203,7 +2303,10 @@ pub fn read_image_data(path: String) -> Result<String, String> {
         return Err(format!("{path}: não é arquivo"));
     }
     if meta.len() > MAX_BYTES {
-        return Err(format!("{path}: {} KB acima do teto de 8 MB", meta.len() / 1024));
+        return Err(format!(
+            "{path}: {} KB acima do teto de 8 MB",
+            meta.len() / 1024
+        ));
     }
     let ext = real
         .extension()
@@ -2229,9 +2332,9 @@ pub fn read_image_data(path: String) -> Result<String, String> {
 /// `query` casa por substring (case-insensitive) no texto + nomes de tool;
 /// `tool` restringe a mensagens que usam a tool; `errors_only` a `toolResult` com erro.
 /// Pagina com `limit` (1..=100, padrão 20) + `offset`. O scan para por orçamento de
-/// tempo (`SEARCH_BUDGET_MS`) ou de bytes (`SEARCH_FILE_BYTES` por arquivo,
-/// `SEARCH_TOTAL_BYTES` no total) — arquivo grande é cortado, mas a varredura
-/// continua nos seguintes. Linha gigante (> `MAX_PATCH_BYTES`) é pulada.
+/// tempo (`SEARCH_BUDGET_MS`) ou de bytes de um único arquivo (`SEARCH_FILE_BYTES`)
+/// — arquivo grande é cortado, mas a varredura continua nos seguintes. Linha
+/// gigante (> `MAX_PATCH_BYTES`) é pulada.
 /// Retorna `{"total","truncated","files","scannedFiles","results":[{"id","file","cwd","title","matches","snippet","tools","hasError"}]}`.
 #[tauri::command(async)]
 pub fn search_sessions(
@@ -2254,7 +2357,17 @@ pub fn search_sessions(
 
 /// Mesma lógica com o root explícito — testável sem tocar em `HOME`.
 /// Linha de resultado da busca: (mtime, id, file, cwd, title, matches, snippet, tools, has_error).
-type SearchHit = (u64, String, String, String, String, usize, String, Vec<String>, bool);
+type SearchHit = (
+    u64,
+    String,
+    String,
+    String,
+    String,
+    usize,
+    String,
+    Vec<String>,
+    bool,
+);
 
 fn search_sessions_in(
     root: &Path,
@@ -2272,13 +2385,44 @@ fn search_sessions_in(
         limit,
         offset,
         SEARCH_FILE_BYTES,
-        SEARCH_TOTAL_BYTES,
         SEARCH_BUDGET_MS,
     )
 }
 
 /// Mesma busca com as guardas explícitas (os testes apertam os tetos).
 #[allow(clippy::too_many_arguments)]
+/// Trecho do texto em volta da primeira ocorrência do termo. Pegar sempre o
+/// começo da mensagem deixava o resultado da busca sem o termo procurado à vista
+/// (parecia resultado errado). `flat` já vem com espaços normalizados.
+fn snippet_around(flat: &str, q: &str, max: usize) -> String {
+    const LEAD_WORDS: usize = 8;
+    let words: Vec<&str> = flat.split(' ').collect();
+    let at = if q.is_empty() {
+        0
+    } else {
+        words
+            .iter()
+            .position(|w| w.to_lowercase().contains(q))
+            .unwrap_or(0)
+    };
+    let start = at.saturating_sub(LEAD_WORDS);
+    let mut out = String::new();
+    if start > 0 {
+        out.push('…');
+    }
+    for (i, w) in words[start..].iter().enumerate() {
+        let sep = usize::from(!out.is_empty() && (i > 0 || start > 0));
+        if out.chars().count() + sep + w.chars().count() > max {
+            break;
+        }
+        if sep == 1 {
+            out.push(' ');
+        }
+        out.push_str(w);
+    }
+    out
+}
+
 fn search_sessions_capped(
     root: &Path,
     query: &str,
@@ -2287,7 +2431,6 @@ fn search_sessions_capped(
     limit: Option<usize>,
     offset: Option<usize>,
     file_cap: usize,
-    total_cap: usize,
     budget_ms: u128,
 ) -> Result<String, String> {
     let q = query.trim().to_lowercase();
@@ -2325,7 +2468,6 @@ fn search_sessions_capped(
     }
     files.sort_by_key(|a| std::cmp::Reverse(a.0));
 
-    let mut scanned: usize = 0;
     let mut seen: usize = 0;
     let mut scanned_files: usize = 0;
     let mut truncated = false;
@@ -2353,12 +2495,11 @@ fn search_sessions_capped(
             if line.len() > MAX_PATCH_BYTES {
                 continue;
             }
-            scanned += line.len();
             file_bytes += line.len();
             seen += 1;
             // Corta só este arquivo (não a varredura inteira) quando ele passa do
             // teto: um `bash` de vários MB não pode esconder as sessões seguintes.
-            if file_bytes > file_cap || scanned > total_cap {
+            if file_bytes > file_cap {
                 truncated = true;
                 break;
             }
@@ -2456,7 +2597,7 @@ fn search_sessions_capped(
             matches += 1;
             if snippet.is_empty() {
                 let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
-                snippet = flat.chars().take(240).collect();
+                snippet = snippet_around(&flat, &q, SNIPPET_CHARS);
             }
         }
         if matches == 0 {
@@ -2559,7 +2700,11 @@ fn missions_status_in(dir: &Path) -> Result<String, String> {
     }
     Ok(format!(
         "[{}]",
-        items.into_iter().map(|(_, j)| j).collect::<Vec<_>>().join(",")
+        items
+            .into_iter()
+            .map(|(_, j)| j)
+            .collect::<Vec<_>>()
+            .join(",")
     ))
 }
 
@@ -2576,7 +2721,8 @@ mod tests {
     impl Tmp {
         fn new(tag: &str) -> Self {
             let n = SEQ.fetch_add(1, Ordering::Relaxed);
-            let dir = std::env::temp_dir().join(format!("sightdeck-{}-{tag}-{n}", std::process::id()));
+            let dir =
+                std::env::temp_dir().join(format!("sightdeck-{}-{tag}-{n}", std::process::id()));
             let _ = fs::remove_dir_all(&dir);
             fs::create_dir_all(&dir).expect("criar tmpdir");
             Tmp(dir)
@@ -2643,7 +2789,10 @@ mod tests {
         let p = t.file("h.log", "linha-1\nlinha-2\nlinha-3\n");
         let path = p.to_str().expect("path utf-8");
         // Cabe inteiro: devolve tudo.
-        assert_eq!(read_tail(path, 1024).as_deref(), Some("linha-1\nlinha-2\nlinha-3\n"));
+        assert_eq!(
+            read_tail(path, 1024).as_deref(),
+            Some("linha-1\nlinha-2\nlinha-3\n")
+        );
         // Corta no meio: a primeira linha sobrevivente é inteira.
         let got = read_tail(path, 12).expect("tail");
         assert!(!got.starts_with("nha"), "linha parcial vazou: {got:?}");
@@ -2673,8 +2822,13 @@ mod tests {
     #[test]
     fn read_image_data_recusa_arquivo_ausente() {
         let t = Tmp::new("imgsumiu");
-        let err = read_image_data(t.at("nao-existe.png").to_str().expect("path utf-8").to_string())
-            .expect_err("arquivo ausente não deveria passar");
+        let err = read_image_data(
+            t.at("nao-existe.png")
+                .to_str()
+                .expect("path utf-8")
+                .to_string(),
+        )
+        .expect_err("arquivo ausente não deveria passar");
         assert!(err.contains("nao-existe.png"), "erro inesperado: {err}");
     }
 
@@ -2682,13 +2836,19 @@ mod tests {
     fn slim_message_line_troca_imagem_por_marcador_com_tamanho() {
         let line = r#"{"type":"message","message":{"role":"toolResult","content":[{"type":"image","data":"AAAA","mimeType":"image/png"}]}}"#;
         let out = slim_message_line(line, 64 * 1024).expect("linha");
-        assert!(!out.contains("AAAA"), "base64 vazou para o histórico: {out}");
+        assert!(
+            !out.contains("AAAA"),
+            "base64 vazou para o histórico: {out}"
+        );
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
         let block = &v["message"]["content"][0];
         assert_eq!(block["type"], "text");
         assert_eq!(block["img"]["mimeType"], "image/png");
         assert_eq!(block["img"]["bytes"], 3);
-        assert!(block["text"].as_str().unwrap_or_default().starts_with("[imagem"));
+        assert!(block["text"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("[imagem"));
     }
 
     // ---------- resolve_pi_bin: decisão pura, sem env e sem fs ----------
@@ -2708,9 +2868,7 @@ mod tests {
 
     #[test]
     fn pi_bin_env_wins_over_home() {
-        let got = resolve_pi_bin_with(Some("/opt/x/pi"), Some(Path::new("/home/u")), "", |_| {
-            true
-        });
+        let got = resolve_pi_bin_with(Some("/opt/x/pi"), Some(Path::new("/home/u")), "", |_| true);
         assert_eq!(got, PathBuf::from("/opt/x/pi"));
     }
 
@@ -2760,18 +2918,11 @@ mod tests {
 
     #[test]
     fn resolve_pi_bin_with_encontra_pi_exe_no_windows() {
-        let got = resolve_pi_bin_with(
-            None,
-            Some(Path::new(r"C:\Users\u")),
-            ".exe",
-            |p| p.ends_with(r".local\bin\pi.exe") || p.ends_with(".local/bin/pi.exe"),
-        );
+        let got = resolve_pi_bin_with(None, Some(Path::new(r"C:\Users\u")), ".exe", |p| {
+            p.ends_with(r".local\bin\pi.exe") || p.ends_with(".local/bin/pi.exe")
+        });
         assert_eq!(got.file_name().unwrap(), "pi.exe", "{}", got.display());
-        assert!(
-            got.ends_with(".local/bin/pi.exe"),
-            "{}",
-            got.display()
-        );
+        assert!(got.ends_with(".local/bin/pi.exe"), "{}", got.display());
         // nenhum candidato existe: o fallback também leva o sufixo
         assert_eq!(
             resolve_pi_bin_with(None, Some(Path::new(r"C:\Users\u")), ".exe", |_| false),
@@ -2782,7 +2933,10 @@ mod tests {
     #[test]
     fn resolve_pi_bin_aplica_o_sufixo_do_so_atual() {
         let got = resolve_pi_bin(None, None, |_| false);
-        assert_eq!(got, PathBuf::from(format!("pi{}", bin_suffix(cfg!(windows)))));
+        assert_eq!(
+            got,
+            PathBuf::from(format!("pi{}", bin_suffix(cfg!(windows))))
+        );
     }
 
     // ---------- pick_home: HOME primeiro, USERPROFILE como reserva do Windows ----------
@@ -2797,7 +2951,10 @@ mod tests {
     fn pick_home_cai_para_userprofile() {
         let esperado = Some(PathBuf::from(r"C:\Users\u"));
         assert_eq!(pick_home(None, Some(r"C:\Users\u".into())), esperado);
-        assert_eq!(pick_home(Some("".into()), Some(r"C:\Users\u".into())), esperado);
+        assert_eq!(
+            pick_home(Some("".into()), Some(r"C:\Users\u".into())),
+            esperado
+        );
     }
 
     #[test]
@@ -2844,14 +3001,19 @@ mod tests {
         );
         let f = t.file(
             "sessions/proj/s.jsonl",
-            &format!("{{\"type\":\"message\",\"id\":1}}\n{huge}{{\"type\":\"message\",\"id\":3}}\n"),
+            &format!(
+                "{{\"type\":\"message\",\"id\":1}}\n{huge}{{\"type\":\"message\",\"id\":3}}\n"
+            ),
         );
 
         let out = read_session_messages_in(&f, &root, Some(50), None).unwrap();
         let meta = out.lines().next().unwrap();
         assert!(meta.contains("\"total\":3"), "{meta}");
         assert_eq!(out.lines().count(), 3, "meta + 2 mensagens");
-        assert!(!out.contains("xxxxx"), "linha gigante não pode ir ao webview");
+        assert!(
+            !out.contains("xxxxx"),
+            "linha gigante não pode ir ao webview"
+        );
     }
 
     #[test]
@@ -2875,10 +3037,16 @@ mod tests {
         let meta = out.lines().next().unwrap();
         assert!(meta.contains("\"total\":3"), "{meta}");
         assert_eq!(out.lines().count(), 4, "meta + 3 mensagens");
-        assert!(out.contains("prompt que nao pode sumir"), "texto da mensagem sumiu: {out}");
+        assert!(
+            out.contains("prompt que nao pode sumir"),
+            "texto da mensagem sumiu: {out}"
+        );
         assert!(out.contains("[imagem"), "marcador da imagem sumiu: {out}");
         assert!(!out.contains(&big), "base64 gigante nao pode ir ao webview");
-        assert!(out.contains("\"timestamp\":123"), "timestamp (ordem da row) deve sobreviver");
+        assert!(
+            out.contains("\"timestamp\":123"),
+            "timestamp (ordem da row) deve sobreviver"
+        );
     }
 
     #[test]
@@ -2914,7 +3082,10 @@ mod tests {
         assert!(meta.contains("\"hasMore\":false"), "{meta}");
         assert_eq!(out.lines().count(), 2, "meta + a mensagem truncada");
         assert!(out.contains("texto truncado"), "{out}");
-        assert!(!out.contains(&big), "thinking gigante nao pode ir ao webview");
+        assert!(
+            !out.contains(&big),
+            "thinking gigante nao pode ir ao webview"
+        );
     }
 
     #[test]
@@ -2934,7 +3105,10 @@ mod tests {
         assert!(meta.contains("\"hasMore\":false"), "{meta}");
         assert_eq!(out.lines().count(), 2, "meta + a mensagem truncada");
         assert!(out.contains("argumentos omitidos"), "{out}");
-        assert!(!out.contains(&big), "argumentos gigantes nao podem ir ao webview");
+        assert!(
+            !out.contains(&big),
+            "argumentos gigantes nao podem ir ao webview"
+        );
     }
 
     #[test]
@@ -2951,7 +3125,10 @@ mod tests {
         assert!(meta.contains("\"omitted\":0"), "{meta}");
         assert!(meta.contains("\"consumed\":120"), "{meta}");
         assert!(meta.contains("\"hasMore\":false"), "{meta}");
-        assert!(out.contains("\"id\":0}"), "deveria começar na mais antiga: {out}");
+        assert!(
+            out.contains("\"id\":0}"),
+            "deveria começar na mais antiga: {out}"
+        );
         assert!(
             !out.contains("\"id\":20}"),
             "não deveria alcançar as já carregadas: {out}"
@@ -2962,6 +3139,29 @@ mod tests {
 
     fn search_msg(role: &str, body: &str) -> String {
         format!("{{\"type\":\"message\",\"message\":{{\"role\":\"{role}\",{body}}}}}")
+    }
+
+    #[test]
+    fn snippet_around_mostra_o_termo_buscado() {
+        // O snippet antigo pegava os 240 primeiros chars da mensagem: o termo
+        // procurado não aparecia e o resultado parecia errado.
+        let flat = format!(
+            "inicio da mensagem {}termo procurado aqui",
+            "palavra ".repeat(40)
+        );
+        let s = snippet_around(&flat, "procurado", SNIPPET_CHARS);
+        assert!(s.contains("procurado"), "snippet sem o termo: {s}");
+        assert!(s.starts_with('…'), "snippet devia indicar corte: {s}");
+        assert!(
+            s.chars().count() <= SNIPPET_CHARS,
+            "snippet longo: {}",
+            s.chars().count()
+        );
+        // termo no começo: sai inteiro, sem reticências
+        assert_eq!(
+            snippet_around("termo no inicio", "termo", SNIPPET_CHARS),
+            "termo no inicio"
+        );
     }
 
     #[test]
@@ -3007,7 +3207,10 @@ mod tests {
         assert_eq!(v["total"], 1, "{out}");
         assert_eq!(v["results"][0]["id"], "a", "{out}");
         assert!(
-            v["results"][0]["snippet"].as_str().unwrap().contains("deployar"),
+            v["results"][0]["snippet"]
+                .as_str()
+                .unwrap()
+                .contains("deployar"),
             "{out}"
         );
 
@@ -3036,7 +3239,10 @@ mod tests {
         assert_eq!(v1["total"], 2, "{p1}");
         assert_eq!(v1["results"].as_array().unwrap().len(), 1, "{p1}");
         assert_eq!(v2["results"].as_array().unwrap().len(), 1, "{p2}");
-        assert_ne!(v1["results"][0]["id"], v2["results"][0]["id"], "{p1} vs {p2}");
+        assert_ne!(
+            v1["results"][0]["id"], v2["results"][0]["id"],
+            "{p1} vs {p2}"
+        );
     }
 
     #[test]
@@ -3076,7 +3282,8 @@ mod tests {
             &search_msg("user", r#""content":"beta""#),
         );
 
-        let out = search_sessions_capped(&root, "beta", None, false, None, None, 4096, usize::MAX, 10_000).unwrap();
+        let out =
+            search_sessions_capped(&root, "beta", None, false, None, None, 4096, 10_000).unwrap();
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert_eq!(v["total"], 1, "{out}");
         assert_eq!(v["results"][0]["id"], "small", "{out}");
@@ -3247,7 +3454,11 @@ mod tests {
         let hunk = "@@ -1 +1 @@\n-Y\n+X";
         let err = revert_hunk_in(&cwd, &f, hunk).unwrap_err();
         assert!(err.contains("2 vezes"), "{err}");
-        assert_eq!(fs::read_to_string(&f).unwrap(), "X\nX\n", "nada pode mudar na recusa");
+        assert_eq!(
+            fs::read_to_string(&f).unwrap(),
+            "X\nX\n",
+            "nada pode mudar na recusa"
+        );
     }
 
     #[test]
@@ -3258,7 +3469,11 @@ mod tests {
         let hunk = "@@ -1,2 +1,2 @@\n a\n-b\n+B\n\u{2026} patch truncado";
         let err = revert_hunk_in(&cwd, &f, hunk).unwrap_err();
         assert!(err.contains("truncado"), "{err}");
-        assert_eq!(fs::read_to_string(&f).unwrap(), "a\nB\n", "nada pode mudar na recusa");
+        assert_eq!(
+            fs::read_to_string(&f).unwrap(),
+            "a\nB\n",
+            "nada pode mudar na recusa"
+        );
     }
 
     #[test]
@@ -3280,7 +3495,10 @@ mod tests {
         let hunk = "@@ -1,3 +1,3 @@\n a\n-b\n+B\n c";
         let out = revert_hunk_in(&cwd, Path::new("src/a.txt"), hunk).unwrap();
         assert!(out.contains("hunk desfeito"), "{out}");
-        assert_eq!(fs::read_to_string(t.at("proj/src/a.txt")).unwrap(), "a\nb\nc\n");
+        assert_eq!(
+            fs::read_to_string(t.at("proj/src/a.txt")).unwrap(),
+            "a\nb\nc\n"
+        );
     }
 
     #[test]
@@ -3291,7 +3509,11 @@ mod tests {
         let hunk = "+linha1\n+linha2";
         let err = revert_hunk_in(&cwd, &f, hunk).unwrap_err();
         assert!(err.contains("só com adições"), "{err}");
-        assert_eq!(fs::read_to_string(&f).unwrap(), "linha1\nlinha2\n", "nada pode mudar na recusa");
+        assert_eq!(
+            fs::read_to_string(&f).unwrap(),
+            "linha1\nlinha2\n",
+            "nada pode mudar na recusa"
+        );
     }
 
     #[test]
@@ -3302,7 +3524,11 @@ mod tests {
         let hunk = "@@ -1,3 +1,3 @@\n a\n-b\n+B\n c";
         let err = revert_hunk_in(&cwd, &f, hunk).unwrap_err();
         assert!(err.contains("não encontrado"), "{err}");
-        assert_eq!(fs::read_to_string(&f).unwrap(), "a\nZ\nc\n", "nada pode mudar na recusa");
+        assert_eq!(
+            fs::read_to_string(&f).unwrap(),
+            "a\nZ\nc\n",
+            "nada pode mudar na recusa"
+        );
     }
 
     #[test]
@@ -3313,7 +3539,11 @@ mod tests {
         let hunk = "@@ -1,3 +1,2 @@\n a\n-b\n c";
         let err = revert_hunk_in(&cwd, &f, hunk).unwrap_err();
         assert!(err.contains("só com remoções"), "{err}");
-        assert_eq!(fs::read_to_string(&f).unwrap(), "a\nb\nc\n", "nada pode mudar na recusa");
+        assert_eq!(
+            fs::read_to_string(&f).unwrap(),
+            "a\nb\nc\n",
+            "nada pode mudar na recusa"
+        );
     }
 
     // ---------- missions_status: resumo somente-leitura por projeto ----------
@@ -3330,7 +3560,10 @@ mod tests {
             r#"{"id":"b","title":"U","status":"completed","updatedAt":"2026-11-01","runs":[{}],"cwd":"/y"}"#,
         );
         let out = missions_status_in(&t.at("missions")).unwrap();
-        assert!(out.find("\"id\":\"a\"").unwrap() < out.find("\"id\":\"b\"").unwrap(), "{out}");
+        assert!(
+            out.find("\"id\":\"a\"").unwrap() < out.find("\"id\":\"b\"").unwrap(),
+            "{out}"
+        );
         assert!(out.contains("\"runs\":1"), "{out}");
         assert!(out.contains("\"project\":\"h2\""), "{out}");
     }
@@ -3392,14 +3625,27 @@ mod tests {
 
     #[test]
     fn login_provider_rejects_empty_unknown_and_injection() {
-        for bad in ["", "   ", "nope", "openai; rm -rf ~", "$(x)", "openai|cat /etc/passwd"] {
-            assert!(validate_login_provider(bad).is_err(), "{bad:?} deveria falhar");
+        for bad in [
+            "",
+            "   ",
+            "nope",
+            "openai; rm -rf ~",
+            "$(x)",
+            "openai|cat /etc/passwd",
+        ] {
+            assert!(
+                validate_login_provider(bad).is_err(),
+                "{bad:?} deveria falhar"
+            );
         }
     }
 
     #[test]
     fn login_allowlist_stays_shell_safe() {
-        assert!(!LOGIN_PROVIDERS.is_empty(), "allowlist não pode nascer vazia");
+        assert!(
+            !LOGIN_PROVIDERS.is_empty(),
+            "allowlist não pode nascer vazia"
+        );
         for p in LOGIN_PROVIDERS {
             assert!(
                 !p.is_empty() && p.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'),
@@ -3465,7 +3711,8 @@ mod tests {
         let got: serde_json::Value = serde_json::from_str(&compaction_state(&root, "a/b")).unwrap();
         assert_eq!(got["reserveTokens"], serde_json::json!(40000));
         assert!(got["keepRecentTokens"].is_null());
-        let none: serde_json::Value = serde_json::from_str(&compaction_state(&root, "x/y")).unwrap();
+        let none: serde_json::Value =
+            serde_json::from_str(&compaction_state(&root, "x/y")).unwrap();
         assert!(none["reserveTokens"].is_null(), "{none}");
     }
 
