@@ -11,7 +11,8 @@ use crate::git::run_git;
 use crate::sessions::contained_in;
 
 /// Teto do texto devolvido ao webview: acima disso o viewer marca `truncated`.
-const MAX_TEXT_BYTES: usize = 256 * 1024;/// Profundidade do fallback sem git (3 níveis bastam para navegar).
+const MAX_TEXT_BYTES: usize = 256 * 1024;
+/// Profundidade do fallback sem git (3 níveis bastam para navegar).
 const WALK_DEPTH: usize = 3;
 /// Diretórios que nunca entram na lista do fallback (o git já os ignora).
 const SKIP_DIRS: [&str; 8] = [
@@ -53,7 +54,13 @@ fn project_files_in(cwd: &Path) -> Result<Vec<String>, String> {
 
     if let Some(out) = run_git(
         &cwd.to_string_lossy(),
-        &["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        &[
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        ],
     )? {
         let mut files: Vec<String> = out
             .split('\0')
@@ -227,7 +234,12 @@ mod tests {
         assert!(files.contains(&"a.md".to_string()), "{files:?}");
         assert!(files.contains(&"sub/b.MD".to_string()), "{files:?}");
         assert!(!files.iter().any(|f| f.ends_with(".txt")), "{files:?}");
-        assert!(!files.iter().any(|f| f.contains("node_modules") || f.contains(".hidden")), "{files:?}");
+        assert!(
+            !files
+                .iter()
+                .any(|f| f.contains("node_modules") || f.contains(".hidden")),
+            "{files:?}"
+        );
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
