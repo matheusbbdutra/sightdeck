@@ -704,3 +704,76 @@ cd ~/Projects/sightdeck/src-tauri && cargo run
    entram com `--features e2e` — produção não registra os plugins. Falta rodar no CI (exige sessão
    gráfica/Xvfb e build do Tauri com a feature).
 
+## Arch/CachyOS: PKGBUILD local (2026-11-21)
+
+- `PKGBUILD` novo compila o checkout (`makepkg -si`), sem release publicada. `options=(!lto)` é
+  **obrigatório** no CachyOS: o `/etc/makepkg.conf` exporta `-flto=auto` em CFLAGS/LDFLAGS e o C
+  do crate `ring` vira bitcode que o `rust-lld` não lê → 21 `undefined symbol:
+  ring_core_0_17_14__*` no link. `RUSTFLAGS` de `/etc/makepkg.conf.d/rust.conf` (opt-level=3,
+  target-cpu=native) pode ficar. `.gitignore` ganhou `/pkg/`, `/src/`, `/sightdeck-*.pkg.tar.zst`
+  (ancorados: `src/` sem barra engoliria `ui/src/` e `src-tauri/src/`). README tem a seção de Arch.
+- **Duas instalações convivem**: `~/.local/bin/sightdeck` (10:35 de 19 nov) vem antes de
+  `/usr/bin/sightdeck` (pacote `sightdeck 0.2.6.r171.gd1dc709-1`, 21 nov) no PATH — o app que roda é
+  o binário antigo. Para testar o pacote: fechar o app e remover/renomear `~/.local/bin/sightdeck`.
+- **Instalação fantasma (21 nov 11:47)**: `pacman -U` reinstallou, mas o app continuou com
+  `exe=/home/matheusdutra/.local/bin/sightdeck` (pid com pai `systemd --user`, unidade transiente
+  `app-sightdeck@<hash>.service` = `[systemd-run] /home/matheusdutra/.local/bin/sightdeck`, no
+  journal com `Started [systemd-run] ...`). Motivo: `~/.local/share/applications/sightdeck.desktop`
+  (10:42) tinha `Exec=/home/matheusdutra/.local/bin/sightdeck` **absoluto** e .desktop do usuário
+  tem precedência sobre `/usr/share/applications/` no lançador. Evidência que confunde: o PATH
+  *do processo* é `/usr/local/sbin:/usr/local/bin:/usr/bin:...` (sem `~/.local/bin`) — quem resolveu
+  o caminho foi o Exec, não o PATH. Correção: `.desktop` do pacote agora usa
+  `Exec=/usr/bin/sightdeck` (PKGBUILD com comentário), e os arquivos antigos foram renomeados para
+  `~/.local/bin/sightdeck.old-19nov` e `~/.local/share/applications/sightdeck.desktop.bak-19nov`.
+  Regra: depois de `pacman -U`, conferir `readlink -f /proc/<pid do app>/exe` — versão do pacote
+  não prova qual binário está rodando.
+
+## each_key_duplicate (RESOLVIDO 2026-11-21)
+
+- Erro do Svelte 5 (`https://svelte.dev/e/each_key_duplicate`) no boot; em produção a mensagem é
+  só a URL, sem chave/índice. `window.onerror` (ui/src/main.js:378) só mostra na barra `#fatal` —
+  o stack vem do `npm run dev` (`[vite] (client) [Unhandled error]`, frames `src/...svelte`).
+- **Causa**: `modelListSnapshot` (ui/src/main.js) empurrava **uma linha de favorito por provider**,
+  com chave `f.id`. O id `deepseek-v4.1-flash` existe em `opencode` **e** `opencode-go` e está em
+  `model-favs` → duas linhas com o mesmo `id` → `{#each snap.list.favs as f (f.id)}`
+  (ui/src/composer/ModelPop.svelte:54) estourava ao montar o pop no boot.
+- **Correção**: `favSeen` (Set por `m.id`) antes do `favRows.push` — dedupe pela MESMA expressão
+  usada como chave. Regressão em `tests/ui.test.mjs` ("mesmo id favoritado em dois providers vira
+  uma linha só").
+- **Descartados antes** (scripts node sobre `~/.pi/agent` + sqlite do localStorage): MissionsPane
+  `m.key` (228 missões, 0 sem id, 0 ids repetidos); SessionTree grupo `g.path` (19 dirs → 15 grupos,
+  0 path repetido); TabBar `t.key` (3 abas, chaves distintas); FilesPane `r.path` (132 paths, 4
+  markdown → 5 linhas); PlansPane `r.file` (`canonicalize`, src-tauri/src/plans.rs:78-88); SubsPane
+  histórico `c.id` (336 children com `run-*`, nenhum com mais de um run); Theme (6 presets).
+- Reprodução: clone do localStorage de produção
+  (`~/.local/share/dev.matheus.sightdeck/localstorage/tauri_localhost_0.localstorage`) para o origin
+  de dev `http_localhost_1420.localstorage` + `PWUI_DEBUG=1 npm run dev`.
+
+## Busca de sessões: painel não escondia, resposta velha, snippet errado (RESOLVIDO 2026-11-21)
+
+- **Sintoma** (print do usuário): campo "buscar nas sessões…" vazio, mas a lista de resultados,
+  os filtros (`tool`, `erros`) e a meta continuavam na tela; apagar o termo não limpava nada; a
+  linha do resultado parecia não ter o termo buscado.
+- **Causa 1 (CSS)**: ui/src/styles.css só tinha regras por elemento (`.health-chip.hidden`,
+  `.model-pop.hidden`, …) — o `classList.toggle('hidden', !on)` de `scheduleSearch()` em
+  `#searchresults`, `#searchmeta` e `.side-filters` era **inerte**. Correção: `.hidden {
+  display:none; }` no fim de ui/src/styles.css (linha 810, depois de `.side-filters` de propósito:
+  mesma especificidade, vence por ordem). Regra: ao usar `toggle('hidden')`, o elemento precisa de
+  regra genérica ou a classe não faz nada.
+- **Causa 2 (corrida)**: `runSearch()` não tinha sequência — resposta de um filtro antigo
+  repintava a lista depois de digitar/apagar (a varredura leva segundos). Correção: `searchSeq`
+  (ui/src/main.js:557; `++` no desligamento em 607 e no início de `runSearch()` em 621; `if (seq
+  !== searchSeq) return;` em 629; erro só se `seq === searchSeq` em 641) + limpeza de
+  `searchItems/searchTotal/searchOffset` e `loadSessions()` quando desliga.
+- **Causa 3 (precisão)**: o snippet pegava os 240 primeiros chars da mensagem. Correção:
+  `snippet_around(flat, q, max)` em src-tauri/src/sessions.rs (janela 8 palavras antes do match,
+  '…' quando corta) usado por `search_sessions_capped`; teste `snippet_around_mostra_o_termo_buscado`.
+- **Teto de leitura**: `SEARCH_TOTAL_BYTES` (96 MB) removido — ele truncava a varredura em 96 MB de
+  624 MB e devolvia 56 de 75 resultados para "limita". Ficaram `SEARCH_FILE_BYTES` (32 MB por
+  arquivo) e `SEARCH_BUDGET_MS = 5000` (era 2500, que parava em 121 de 145 arquivos). Medido com o
+  corpus real: 145/145 arquivos, 75 resultados, `truncated:false`, 2,44 s com cache quente.
+- **Verificação**: `cargo test` 108 ok; `npx vitest run tests/ui.test.mjs` 160 ok; `npm run
+  build:ui` ok com `.hidden{display:none}` standalone no bundle (pos. 40107, depois de
+  `.side-filters{` em 9193); pacote refeito com `makepkg --noconfirm -f` (freshness provada por
+  `strip` do binário = hash do binário empacotado).
+
