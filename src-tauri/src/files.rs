@@ -188,8 +188,24 @@ mod tests {
     #[test]
     fn recusa_caminho_fora_do_projeto() {
         let dir = temp_dir("escape");
-        let err = read_text_in(&dir, Path::new("../../etc/passwd")).unwrap_err();
+        // O alvo precisa EXISTIR para o `canonicalize` de `contained_in` resolvê-lo
+        // antes de comparar prefixos: um caminho inexistente morre com NotFound
+        // (no Windows `../../etc/passwd` cai em `AppData\Local\etc\passwd`).
+        let fora = dir.with_file_name(format!(
+            "{}-fora",
+            dir.file_name().unwrap().to_string_lossy()
+        ));
+        std::fs::create_dir_all(&fora).unwrap();
+        std::fs::write(fora.join("segredo.txt"), "x").unwrap();
+        let rel = format!(
+            "../{}/segredo.txt",
+            fora.file_name().unwrap().to_string_lossy()
+        );
+
+        let err = read_text_in(&dir, Path::new(&rel)).unwrap_err();
         assert!(err.contains("fora do diretório"), "{err}");
+
+        std::fs::remove_dir_all(&fora).unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

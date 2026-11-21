@@ -2423,6 +2423,8 @@ fn snippet_around(flat: &str, q: &str, max: usize) -> String {
     out
 }
 
+/// Mesma busca com as guardas explícitas (os testes apertam os tetos).
+#[allow(clippy::too_many_arguments)]
 fn search_sessions_capped(
     root: &Path,
     query: &str,
