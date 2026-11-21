@@ -2,6 +2,11 @@ node_modules/
 ui/dist/
 src-tauri/target/
 capture/target/
+
+# makepkg (PKGBUILD local) — ancorado na raiz, senão engoliria ui/src e src-tauri/src
+/pkg/
+/src/
+/sightdeck-*.pkg.tar.zst
 *.log
 .DS_Store
 

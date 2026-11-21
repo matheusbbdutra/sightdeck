@@ -34,6 +34,19 @@ Download from the [latest release](https://github.com/matheusbbdutra/sightdeck/r
 | Windows | `sightdeck_<version>_x64-setup.exe` | run the installer |
 | Windows (MSI) | `sightdeck_<version>_x64_en-US.msi` | `msiexec /i sightdeck_*.msi` |
 
+### Arch / CachyOS (compila o checkout local)
+
+The `PKGBUILD` at the repo root builds this working copy and installs it through pacman — no
+release needed:
+
+```bash
+sudo pacman -S --needed base-devel webkit2gtk-4.1 nodejs npm
+makepkg -si
+```
+
+After pulling new commits, run `makepkg -si` again: the version is derived from
+`tauri.conf.json` plus the commit count, so pacman sees it as an upgrade.
+
 > **macOS is not supported.** There is no way to validate it here (no macOS host or VM), and
 > shipping an untested `.dmg` would be a promise we can't keep.
 
@@ -42,6 +55,7 @@ Download from the [latest release](https://github.com/matheusbbdutra/sightdeck/r
 - **`pi` 1.4+** on `PATH` — the app never installs or updates pi by itself
 - **Node.js 22+** (pi's own runtime)
 - Linux only: `libwebkit2gtk-4.1`, `libsoup-3.0`, `gtk+-3.0`, `librsvg2`
+  (`webkit2gtk-4.1` on Arch)
 
 > Binaries are **unsigned** (no Authenticode certificate). Windows SmartScreen will warn
 > on first launch.
