@@ -2,7 +2,7 @@
   "name": "sightdeck",
   "private": true,
   "type": "module",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Desktop client for the pi coding agent",
   "scripts": {
     "tauri": "tauri",

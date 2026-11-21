@@ -5,6 +5,28 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.7] — 2026-11-21
+
+### Added
+- **Aba "Arquivos da pasta"**: lista o markdown do projeto e os planos direto na barra de abas, com
+  árvore navegável e leitura no painel.
+- **PKGBUILD para Arch/CachyOS**: compila o checkout local (`makepkg -si`), sem depender de release
+  publicada. `options=(!lto)` é obrigatório no CachyOS — o `-flto=auto` do `/etc/makepkg.conf`
+  fazia o C do crate `ring` virar bitcode que o `rust-lld` não lê (21 `undefined symbol:
+  ring_core_0_17_14__*` no link).
+
+### Fixed
+- **Boot quebrava com `each_key_duplicate`** quando um modelo favoritado existia em mais de um
+  provider (`deepseek-v4.1-flash` está em `opencode` e em `opencode-go`): os favoritos agora são
+  deduplicados pelo mesmo id usado como chave do `{#each}`.
+- **Busca de sessões**: resultados, filtros e meta não escondiam ao limpar o campo (faltava regra
+  `.hidden` genérica no CSS — a classe era inerte); resposta de uma busca anterior repintava a
+  lista depois de digitar ou apagar (agora há sequência de requisição); e o trecho exibido mostrava
+  o começo da mensagem em vez do termo procurado.
+- **Cobertura da busca**: o teto total de 96 MB cortava a varredura (56 de 75 resultados no corpus
+  real). Ficaram o teto por arquivo e o orçamento de tempo (5 s), e "N de M sessões" passa a
+  refletir a cobertura real.
+
 ## [0.2.6] — 2026-11-19
 
 ### Added
