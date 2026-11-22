@@ -777,3 +777,19 @@ cd ~/Projects/sightdeck/src-tauri && cargo run
   `.side-filters{` em 9193); pacote refeito com `makepkg --noconfirm -f` (freshness provada por
   `strip` do binário = hash do binário empacotado).
 
+## Pacote abria "Could not connect to localhost" (RESOLVIDO 2026-11-22)
+
+- **Sintoma**: o app instalado pelo pacote mostrava a tela de erro do WebKit "Could not connect to
+  localhost: Connection refused" no boot.
+- **Causa**: o `build()` do PKGBUILD chamava `cargo build --release` direto. O `tauri build` passa
+  `--features tauri/custom-protocol`; sem ela `tauri::is_dev()` é `true`
+  (`tauri-2.12.5/src/lib.rs:318-320`) e o `generate_context!` usa a `devUrl` do
+  `tauri.conf.json` (`http://localhost:1420`) em vez de embutir o `ui/dist`
+  (`tauri-macros-2.7.4/src/context.rs:155`).
+- **Evidência**: `/usr/bin/sightdeck` (pacote 0.2.6.r171) tinha `http://localhost:1420` e **zero**
+  ocorrências dos nomes de `ui/dist/assets/*`; o binário novo (`--features tauri/custom-protocol`)
+  tem os três nomes embutidos. `devUrl` continua no binário nos dois casos (config é embutida),
+  então o teste válido é procurar os nomes do `dist`, não a URL.
+- **Correção**: `cargo build --release --locked --features tauri/custom-protocol` no `build()` do
+  PKGBUILD. Pacote `sightdeck 0.2.7.r177.g6ba3104-1` gerado; falta `pacman -U` (exige senha).
+

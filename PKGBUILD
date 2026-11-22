@@ -3,7 +3,7 @@
 # Deixa `node_modules/` e `src-tauri/target/` no próprio repo (já ignorados),
 # então rebuilds seguintes só recompilam o que mudou.
 pkgname=sightdeck
-pkgver=0.2.6.r171.gd1dc709
+pkgver=0.2.7.r177.g6ba3104
 pkgrel=1
 pkgdesc="Desktop client for the pi coding agent"
 arch=(x86_64)
@@ -32,7 +32,10 @@ build() {
   npm ci --no-audit --no-fund
   # beforeBuildCommand do tauri.conf.json
   npm run build:ui
-  cargo build --release --locked --manifest-path src-tauri/Cargo.toml
+  cargo build --release --locked --features tauri/custom-protocol \
+    --manifest-path src-tauri/Cargo.toml
+  # `tauri build` liga `custom-protocol`; sem ela o binário roda em modo dev e abre
+  # http://localhost:1420 ("Could not connect to localhost") em vez do ui/dist embutido.
 }
 
 package() {
