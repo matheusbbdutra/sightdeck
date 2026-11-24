@@ -2919,38 +2919,48 @@ function loadCachedModels() {
   } catch { /* ignora */ }
 }
 
+/** Chave única de um modelo no catálogo: o id sozinho colide entre providers
+ *  (ex.: `glm-5.3-flash` existe em `opencode` e `opencode-go`) e o clique caía
+ *  no primeiro do catálogo — o Zen, gastando crédito em vez do plano Go. */
+function modelKey(m) {
+  return (m && (m.provider || 'outros')) + '/' + (m && m.id);
+}
+
 /** Snapshot puro da lista de modelos (pop Svelte + testes): grupos por provider
- *  com linhas `{id,name,ctx,current}`. `providers` é o Map montado em `fillModels`. */
-export function modelListSnapshot(providers, currentId, filter, favs) {
+ *  com linhas `{key,id,provider,name,ctx,current}`. `providers` é o Map montado
+ *  em `fillModels`; `current` aceita o objeto do modelo ou só o id. */
+export function modelListSnapshot(providers, current, filter, favs) {
   const q = String(filter || '').toLowerCase();
   const favorite = favs instanceof Set ? favs : new Set(Array.isArray(favs) ? favs : []);
+  const cur = typeof current === 'string' ? { id: current } : (current || {});
+  const isCurrent = (m) => m.id === cur.id && (!cur.provider || m.provider === cur.provider);
+  const isFav = (m) => favorite.has(modelKey(m)) || favorite.has(m.id); // id = favorito legado
   const hit = (m) => !q || (m.id + ' ' + (m.name || '')).toLowerCase().includes(q);
   const groups = [];
   const favRows = [];
-  // O mesmo id pode existir em mais de um provider (ex.: opencode e opencode-go):
-  // favorito é o id, então vale UMA linha — duas linhas repetiam a chave do
-  // `{#each}` do pop e o Svelte estourava `each_key_duplicate` no boot.
-  const favSeen = new Set();
   for (const provider of [...providers.keys()].sort()) {
     const all = providers.get(provider).filter(m => m && m.id);
     // Favoritos saem da lista principal e ganham seção própria (provider/modelo).
+    // Chave = provider/id: o mesmo id em dois providers gera duas linhas válidas
+    // (antes deduplicava por id e o Svelte estourava `each_key_duplicate` no boot).
     for (const m of all) {
-      if (!favorite.has(m.id) || !hit(m) || favSeen.has(m.id)) continue;
-      favSeen.add(m.id);
+      if (!isFav(m) || !hit(m)) continue;
       favRows.push({
+        key: modelKey(m),
         id: m.id,
+        provider,
         label: provider + '/' + (m.name || m.id),
         ctx: contextLabel(m.contextWindow),
-        current: m.id === currentId,
+        current: isCurrent(m),
         fav: true,
       });
     }
     const rows = all
-      .filter(m => !favorite.has(m.id) && hit(m))
+      .filter(m => !isFav(m) && hit(m))
       .sort((a, b) => String(a.id).localeCompare(String(b.id)))
       .map(m => ({
-        id: m.id, name: m.name || m.id, ctx: contextLabel(m.contextWindow),
-        current: m.id === currentId, fav: false,
+        key: modelKey(m), id: m.id, provider, name: m.name || m.id,
+        ctx: contextLabel(m.contextWindow), current: isCurrent(m), fav: false,
       }));
     if (rows.length) groups.push({ provider, rows });
   }
@@ -4137,13 +4147,16 @@ async function applyModel(m) {
   sessionState = { ...(sessionState || {}), model: m };
   if (current) { const tb = tabs.find(x => x.key === current.key); if (tb) tb.model = m; }
   updateModelButton(m);
-  pushRecent('/model ' + m.id);
+  pushRecent('/model ' + (m.provider ? m.provider + '/' : '') + m.id);
   closeModelPop();
 }
 
 function findModels(q) {
   const needle = String(q || '').toLowerCase().trim();
   if (!needle || !Array.isArray(allModels)) return [];
+  // provider/id exato desempata o mesmo id entre providers (opencode × opencode-go).
+  const byKey = allModels.filter(m => m && m.id && modelKey(m).toLowerCase() === needle);
+  if (byKey.length) return byKey.slice(0, 10);
   const exact = allModels.filter(m => m && m.id && String(m.id).toLowerCase() === needle);
   if (exact.length) return exact.slice(0, 10);
   return allModels
@@ -4342,7 +4355,10 @@ function renderCmdk() {
       let it = null;
       if (base === '/model' && r.length > 7) {
         const hit = (Array.isArray(allModels) ? allModels : [])
-          .find(m => m && m.id && ('/model ' + m.id).toLowerCase() === r.toLowerCase());
+          .find(m => m && m.id && (
+            ('/model ' + (m.provider ? m.provider + '/' : '') + m.id).toLowerCase() === r.toLowerCase()
+            || ('/model ' + m.id).toLowerCase() === r.toLowerCase() // recente legado, sem provider
+          ));
         if (hit) it = { kind: 'model', model: hit, title: '/model ' + hit.id,
           desc: (hit.provider ? hit.provider + ' · ' : '') + (hit.name || hit.id), src: hit.provider || '' };
       } else if (byTitle.has(base)) {
@@ -5330,6 +5346,11 @@ function addImageFile(file) {
 }
 
 // Print colado no composer: o pi aceita ImageContent no prompt (docs/rpc-commands.md).
+// Um Ctrl+V gera keydown + `paste`; quando o WebView entrega a imagem no evento
+// (WebKitGTK novo), o fallback do clipboard do sistema não pode anexar de novo.
+let pasteSeq = 0; // gesto de colagem corrente (incrementa a cada Ctrl+V)
+let pasteEventImageSeq = -1; // gesto em que o evento `paste` trouxe image/*
+
 $('input').addEventListener('paste', (e) => {
   const items = (e.clipboardData && e.clipboardData.items) || [];
   const files = [];
@@ -5341,19 +5362,26 @@ $('input').addEventListener('paste', (e) => {
   }
   if (!files.length) return; // texto puro segue o caminho normal
   e.preventDefault();
+  pasteEventImageSeq = pasteSeq;
   files.forEach(addImageFile);
 });
 
-// A WebKitGTK não entrega `image/*` no evento paste do webview: consulta o
-// clipboard do sistema. Se não houver imagem, o texto cola normalmente (sem preventDefault).
+// Clipboard do sistema é só fallback: consulta quando o evento `paste` não trouxe
+// imagem (WebKitGTK antigo). Se não houver imagem, o texto cola normalmente.
 $('input').addEventListener('keydown', (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'v') return;
-  inv('paste_image')
-    .then(([data, mime]) => {
-      pendingImages.push({ dataUrl: 'data:' + mime + ';base64,' + data, data, mime });
-      renderAttachments();
-    })
-    .catch(() => { /* clipboard sem imagem: colagem de texto nativa segue */ });
+  const seq = ++pasteSeq;
+  // O `paste` do WebView chega logo depois do keydown, antes de qualquer timer.
+  setTimeout(() => {
+    if (pasteEventImageSeq === seq) return;
+    inv('paste_image')
+      .then(([data, mime]) => {
+        if (pasteEventImageSeq === seq) return; // imagem chegou pelo evento durante o RPC
+        pendingImages.push({ dataUrl: 'data:' + mime + ';base64,' + data, data, mime });
+        renderAttachments();
+      })
+      .catch(() => { /* clipboard sem imagem: colagem de texto nativa segue */ });
+  }, 0);
 });
 
 // Arquivo como contexto: o RPC não tem campo de arquivo, então entra como @caminho
@@ -5607,16 +5635,20 @@ const modelPopHost = {
   getLangPref,
   snapshot(filter) {
     return {
-      list: modelListSnapshot(modelsByProvider, sessionState && sessionState.model ? sessionState.model.id : '', filter, modelFavs),
+      list: modelListSnapshot(modelsByProvider, (sessionState && sessionState.model) || '', filter, modelFavs),
       levels: levelsSnapshot(levelList, sessionState && sessionState.thinkingLevel),
     };
   },
-  async apply(id) {
-    const m = allModels.find(x => x && x.id === id);
+  async apply(key) {
+    // `key` é provider/id; aceita id puro como fallback (favorito legado).
+    const m = allModels.find(x => x && modelKey(x) === key)
+      || allModels.find(x => x && x.id === key);
     await applyModel(m);
   },
-  toggleFav(id) {
-    if (modelFavs.has(id)) modelFavs.delete(id); else modelFavs.add(id);
+  toggleFav(key) {
+    const m = allModels.find(x => x && modelKey(x) === key);
+    const on = modelFavs.has(key) || (m && modelFavs.has(m.id));
+    if (on) { modelFavs.delete(key); if (m) modelFavs.delete(m.id); } else modelFavs.add(key);
     saveModelFavs();
     renderModelList();
   },

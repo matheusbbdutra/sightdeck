@@ -82,6 +82,7 @@ let openCmdk;
 let closeCmdk;
 let typingSnapshot;
 let setTyping;
+let invokeImpl = async () => { throw new Error('sem Tauri no teste'); };
 
 function row(at, text) {
   const node = document.createElement('div');
@@ -102,7 +103,9 @@ beforeAll(async () => {
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>'));
   localStorage.setItem('lang', 'pt');
   vi.stubGlobal('__TAURI__', {
-    core: { invoke: async () => { throw new Error('sem Tauri no teste'); } },
+    // `inv` do main.js captura a função no import; o dispatcher mutável deixa
+    // cada teste responder/contar chamadas sem recarregar o módulo.
+    core: { invoke: (...args) => invokeImpl(...args) },
     event: { listen: async () => () => {} },
   });
   ({ insertRowByAt, shouldRestoreLocalRow, appendCapped, logHasText, setZoom, shouldProbeTurn, shouldAbortOnEsc,
@@ -762,18 +765,25 @@ describe('snapshots dos pops (Fase 2)', () => {
     expect(filtrado.groups.length).toBe(0);
   });
 
-  it('modelListSnapshot: mesmo id favoritado em dois providers vira uma linha só', () => {
-    // Regressão do boot (2026-11-21): a chave do `{#each}` de favoritos é o id do
-    // modelo, mas o mesmo id existe em mais de um provider (opencode e
-    // opencode-go) — duas linhas iguais estouravam each_key_duplicate no boot.
+  it('modelListSnapshot: mesmo id em dois providers gera chaves únicas (provider/id)', () => {
+    // Regressão 2026-11-24: o id sozinho colidia entre opencode e opencode-go e o
+    // clique caía sempre no primeiro provider (Zen, gastando crédito em vez do plano).
     const dois = new Map([
       ['acme', [{ id: 'x', provider: 'acme', contextWindow: 1000 }]],
       ['zed', [{ id: 'x', provider: 'zed', contextWindow: 1000 }]],
     ]);
     const snap = modelListSnapshot(dois, '', '', new Set(['x']));
-    expect(snap.favs.length).toBe(1);
-    expect(snap.favs[0].label).toBe('acme/x');
+    expect(snap.favs.map(f => f.key)).toEqual(['acme/x', 'zed/x']);
+    expect(new Set(snap.favs.map(f => f.key)).size).toBe(2);
+    expect(snap.favs.map(f => f.label)).toEqual(['acme/x', 'zed/x']);
     expect(snap.groups.length).toBe(0);
+    // `current` com objeto marca só o provider certo.
+    const cur = modelListSnapshot(new Map([
+      ['acme', [{ id: 'x', provider: 'acme', contextWindow: 1000 }]],
+      ['zed', [{ id: 'x', provider: 'zed', contextWindow: 1000 }]],
+    ]), { provider: 'zed', id: 'x' }, '', new Set());
+    expect(cur.groups.flatMap(g => g.rows.map(r => [r.key, r.current])))
+      .toEqual([['acme/x', false], ['zed/x', true]]);
   });
 
   it('levelsSnapshot: vazio, único (sem slider) e múltiplo', () => {
@@ -859,7 +869,7 @@ describe('pops svelte montam e sincronizam (Fase 2)', () => {
         list: modelListSnapshot(new Map([['acme', [{ id: 'a', name: 'A', contextWindow: 1000, provider: 'acme' }]]]), '', filter),
         levels: levelsSnapshot([], null),
       }),
-      apply: async (id) => { applied.push(id); },
+      apply: async (key) => { applied.push(key); },
       previewLevel: () => '',
       setLevel: async () => {},
     };
@@ -868,7 +878,7 @@ describe('pops svelte montam e sincronizam (Fase 2)', () => {
     const inst = mount(ModelPop, { target, props: { host } });
     expect(target.querySelectorAll('.model-row').length).toBe(1);
     target.querySelector('.model-row').click();
-    expect(applied).toEqual(['a']);
+    expect(applied).toEqual(['acme/a']);
     inst.sync('zzz');
     await tick();
     expect(target.querySelectorAll('.model-row').length).toBe(0);
@@ -1317,6 +1327,61 @@ describe('anexos do composer (Fase 5a)', () => {
     expect(removed).toEqual([0]);
     unmount(inst);
     target.remove();
+  });
+
+  /** Colagem real: keydown Ctrl+V seguido do evento `paste` do WebView. */
+  function pasteGesture(items) {
+    const input = document.getElementById('input');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', ctrlKey: true, bubbles: true, cancelable: true }));
+    const ev = new Event('paste', { bubbles: true, cancelable: true });
+    ev.clipboardData = { items };
+    input.dispatchEvent(ev);
+  }
+
+  async function clearAttachments() {
+    document.querySelectorAll('#attachrow .attach button').forEach(b => b.click());
+    await tick();
+  }
+
+  it('Ctrl+V com imagem no evento paste não anexa duas vezes', async () => {
+    await clearAttachments();
+    const calls = [];
+    invokeImpl = async (cmd) => {
+      calls.push(cmd);
+      if (cmd === 'paste_image') return ['QUJD', 'image/png'];
+      throw new Error('sem Tauri no teste');
+    };
+    try {
+      const file = new File([new Uint8Array([137, 80, 78, 71])], 'a.png', { type: 'image/png' });
+      pasteGesture([{ kind: 'file', type: 'image/png', getAsFile: () => file }]);
+      await new Promise(r => setTimeout(r, 25));
+      await tick();
+      expect(calls).not.toContain('paste_image');
+      expect(document.querySelectorAll('#attachrow .attach').length).toBe(1);
+    } finally {
+      await clearAttachments();
+      invokeImpl = async () => { throw new Error('sem Tauri no teste'); };
+    }
+  });
+
+  it('Ctrl+V sem imagem no evento paste ainda consulta o clipboard do sistema', async () => {
+    await clearAttachments();
+    const calls = [];
+    invokeImpl = async (cmd) => {
+      calls.push(cmd);
+      if (cmd === 'paste_image') return ['QUJD', 'image/png'];
+      throw new Error('sem Tauri no teste');
+    };
+    try {
+      pasteGesture([]); // WebKitGTK antigo: `paste` só traz texto
+      await new Promise(r => setTimeout(r, 25));
+      await tick();
+      expect(calls).toContain('paste_image');
+      expect(document.querySelectorAll('#attachrow .attach').length).toBe(1);
+    } finally {
+      await clearAttachments();
+      invokeImpl = async () => { throw new Error('sem Tauri no teste'); };
+    }
   });
 });
 

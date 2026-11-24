@@ -5,6 +5,16 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Selecionar GLM no opencode-go caía no Zen**: o seletor do composer aplicava só o id do modelo,
+  e `glm-5.3-flash` existe em `opencode` (Zen, créditos) e `opencode-go` (plano) — o primeiro do
+  catálogo vencia. A linha agora é identificada por `provider/id` (seletor, favoritos, recents e
+  `/model`), então o clique no grupo OPENCODE-GO envia `provider: opencode-go`.
+- **Colar imagem anexava duas vezes**: um único Ctrl+V dispara o keydown e o evento `paste` do
+  WebView; quando o evento já trazia a imagem, o fallback do clipboard do sistema
+  (`paste_image`) anexava a mesma imagem de novo. Agora o fallback só consulta o clipboard se o
+  evento `paste` não entregou `image/*` (regressão em `tests/ui.test.mjs`).
+
 ## [0.2.7] — 2026-11-21
 
 ### Added

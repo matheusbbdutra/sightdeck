@@ -793,3 +793,28 @@ cd ~/Projects/sightdeck/src-tauri && cargo run
 - **Correção**: `cargo build --release --locked --features tauri/custom-protocol` no `build()` do
   PKGBUILD. Pacote `sightdeck 0.2.7.r177.g6ba3104-1` gerado; falta `pacman -U` (exige senha).
 
+## Colar imagem anexava duas vezes (RESOLVIDO 2026-11-22)
+
+- **Sintoma**: um Ctrl+V de imagem colocava dois anexos no composer.
+- **Causa**: a mesma imagem entrava pelos dois caminhos de `ui/src/main.js`: o evento `paste`
+  (handler que empurra em `pendingImages` via `addImageFile`) e o fallback de keydown Ctrl+V
+  (`inv('paste_image')` + `pendingImages.push`). O fallback nasceu quando o WebKitGTK não
+  entregava `image/*` no evento; no WebKitGTK 2.54.3 o evento já traz a imagem, então os dois
+  anexavam.
+- **Correção**: `pasteSeq`/`pasteEventImageSeq` — o evento `paste` marca o gesto corrente quando
+  traz imagem e o fallback (em `setTimeout(0)`, depois do evento) só chama `paste_image` se aquele
+  gesto não marcou. Colagem de texto segue igual (fallback falha e a colagem nativa acontece).
+- **Testes**: `tests/ui.test.mjs` ganhou 2 casos (imagem no evento `paste` não chama `paste_image`;
+  sem imagem no evento ainda chama); `npx vitest run tests/ui.test.mjs` 162 ok.
+
+
+## Seletor de modelo caía no Zen em vez do plano Go (RESOLVIDO 2026-11-24)
+
+- **Sintoma**: escolher GLM-5.3-Flash no grupo OPENCODE-GO consumia créditos do Zen.
+- **Causa**: `modelListSnapshot` (`ui/src/main.js`) devolvia linhas só com `id` e o pop chamava
+  `host.apply(r.id)`; o mesmo id existe em `opencode` e `opencode-go`, e `allModels.find(x => x.id === id)`
+  devolvia o primeiro (`pi --list-models` lista opencode antes) → `set_model` com provider `opencode`.
+  Logs: `model_change` com `provider:"opencode"` em `--home-matheusdutra-Projects-fintrack--` (2026-11-24 15:04/15:44).
+- **Correção**: identidade `provider/id` (`modelKey`), `apply(key)` resolvendo por chave, `current`
+  comparando provider, favoritos e recents qualificados; `/model provider/id` casa exato.
+- **Testes**: regressão em `tests/ui.test.mjs` (chaves únicas e `current` por provider); 162 ok.

@@ -51,17 +51,17 @@
 <div class="model-list">
   {#if snap.list.favs.length}
     <div class="model-group">{tr('model.favs')}</div>
-    {#each snap.list.favs as f (f.id)}
+    {#each snap.list.favs as f (f.key)}
       <div
         class="model-row"
         class:current={f.current}
         role="button"
         tabindex="0"
-        onclick={() => host.apply(f.id)}
+        onclick={() => host.apply(f.key)}
         onkeydown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            host.apply(f.id);
+            host.apply(f.key);
           }
         }}
       >
@@ -70,24 +70,24 @@
         <button
           class="fav on"
           title={tr('model.fav_toggle')}
-          onclick={(e) => { e.stopPropagation(); host.toggleFav(f.id); }}
+          onclick={(e) => { e.stopPropagation(); host.toggleFav(f.key); }}
         >★</button>
       </div>
     {/each}
   {/if}
   {#each snap.list.groups as g (g.provider)}
     <div class="model-group">{g.provider.toUpperCase()}</div>
-    {#each g.rows as r (r.id)}
+    {#each g.rows as r (r.key)}
       <div
         class="model-row"
         class:current={r.current}
         role="button"
         tabindex="0"
-        onclick={() => host.apply(r.id)}
+        onclick={() => host.apply(r.key)}
         onkeydown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            host.apply(r.id);
+            host.apply(r.key);
           }
         }}
       >
@@ -97,7 +97,7 @@
           class="fav"
           class:on={r.fav}
           title={tr('model.fav_toggle')}
-          onclick={(e) => { e.stopPropagation(); host.toggleFav(r.id); }}
+          onclick={(e) => { e.stopPropagation(); host.toggleFav(r.key); }}
         >{r.fav ? '★' : '☆'}</button>
       </div>
     {/each}
