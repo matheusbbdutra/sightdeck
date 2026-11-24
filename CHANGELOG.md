@@ -5,6 +5,8 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.8] — 2026-11-24
+
 ### Fixed
 - **Selecionar GLM no opencode-go caía no Zen**: o seletor do composer aplicava só o id do modelo,
   e `glm-5.3-flash` existe em `opencode` (Zen, créditos) e `opencode-go` (plano) — o primeiro do

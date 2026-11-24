@@ -818,3 +818,9 @@ cd ~/Projects/sightdeck/src-tauri && cargo run
 - **Correção**: identidade `provider/id` (`modelKey`), `apply(key)` resolvendo por chave, `current`
   comparando provider, favoritos e recents qualificados; `/model provider/id` casa exato.
 - **Testes**: regressão em `tests/ui.test.mjs` (chaves únicas e `current` por provider); 162 ok.
+
+## Release 0.2.8 (2026-11-24)
+
+- Versões bumped em `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` e `Cargo.lock`;
+  CHANGELOG fecha `[0.2.8]` com o fix do seletor por `provider/id` e o Ctrl+V duplo.
+- Instalado localmente como `sightdeck 0.2.7.r179.g0b30219-1` (PKGBUILD r179); tag `v0.2.8` no commit de release.

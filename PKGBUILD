@@ -3,7 +3,7 @@
 # Deixa `node_modules/` e `src-tauri/target/` no próprio repo (já ignorados),
 # então rebuilds seguintes só recompilam o que mudou.
 pkgname=sightdeck
-pkgver=0.2.7.r178.gea7722e
+pkgver=0.2.7.r179.g0b30219
 pkgrel=1
 pkgdesc="Desktop client for the pi coding agent"
 arch=(x86_64)
